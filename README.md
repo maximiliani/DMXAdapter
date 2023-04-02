@@ -6,7 +6,7 @@ To manage the settings it provides a WiFi access point and a web UI and REST API
 ## Web-UI
 Access the Web-UI by accessing it under e.g. [http://192.168.4.1/](http://192.168.4.1/)
 
-![Web-UI example](https://github.com/maximiliani/DMXAdapter/blob/main/webui.jpg?raw=true)
+![Web-UI example](https://github.com/maximiliani/DMXAdapter/blob/main/webui.png?raw=true)
 
 ## Documentation REST-API
 `/settings` - GET
