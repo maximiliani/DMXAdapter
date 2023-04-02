@@ -1,0 +1,247 @@
+#include <Arduino.h>
+#include <esp_dmx.h>
+#include <WiFi.h>
+extern "C" {
+	#include "freertos/FreeRTOS.h"
+	#include "freertos/timers.h"
+}
+#include <AsyncMqttClient.h>
+#include <ArtnetWifi.h>
+
+#define WIFI_SSID "WIFI@MI"
+#define WIFI_PASSWORD "UroQpUBRZ8khieu6NUBFXUGvB1HJvrxADd732Qjvp9MK9"
+
+#define MQTT_HOST IPAddress(192, 168, 255, 75)
+#define MQTT_PORT 1883
+
+// Artnet settings
+ArtnetWifi artnet;
+const int startUniverse = 0; // CHANGE FOR YOUR SETUP most software this is 1, some software send out artnet first universe as 0.
+const char host[] = "2.1.1.1"; // CHANGE FOR YOUR SETUP your destination
+
+
+AsyncMqttClient mqttClient;
+TimerHandle_t mqttReconnectTimer;
+TimerHandle_t wifiReconnectTimer;
+
+int transmitPin = 17;
+int receivePin = 16;
+int enablePin = 5;
+dmx_port_t dmxPort = 1;
+byte data[DMX_MAX_PACKET_SIZE];
+int lastValues[DMX_MAX_PACKET_SIZE];
+QueueHandle_t queue;
+unsigned int timer = 0;
+bool dmxIsConnected = false;
+
+void connectToWifi() {
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+void connectToMqtt() {
+  Serial.println("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+void WiFiEvent(WiFiEvent_t event) {
+    Serial.printf("[WiFi-event] event: %d\n", event);
+    switch(event) {
+    case SYSTEM_EVENT_STA_GOT_IP:
+        Serial.println("WiFi connected");
+        Serial.println("IP address: ");
+        Serial.println(WiFi.localIP());
+        connectToMqtt();
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        Serial.println("WiFi lost connection");
+        xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+        xTimerStart(wifiReconnectTimer, 0);
+        break;
+    }
+}
+
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("Connected to MQTT.");
+  Serial.print("Session present: ");
+  Serial.println(sessionPresent);
+  uint16_t packetIdSub = mqttClient.subscribe("test/lol", 2);
+  Serial.print("Subscribing at QoS 2, packetId: ");
+  Serial.println(packetIdSub);
+  mqttClient.publish("test/lol", 0, true, "test 1");
+  Serial.println("Publishing at QoS 0");
+  uint16_t packetIdPub1 = mqttClient.publish("test/lol", 1, true, "test 2");
+  Serial.print("Publishing at QoS 1, packetId: ");
+  Serial.println(packetIdPub1);
+  uint16_t packetIdPub2 = mqttClient.publish("test/lol", 2, true, "test 3");
+  Serial.print("Publishing at QoS 2, packetId: ");
+  Serial.println(packetIdPub2);
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+  Serial.println("Disconnected from MQTT.");
+
+  if (WiFi.isConnected()) {
+    xTimerStart(mqttReconnectTimer, 0);
+  }
+}
+
+void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
+  Serial.println("Subscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+  Serial.print("  qos: ");
+  Serial.println(qos);
+}
+
+void onMqttUnsubscribe(uint16_t packetId) {
+  Serial.println("Unsubscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+}
+
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  Serial.println("Publish received.");
+  Serial.print("  topic: ");
+  Serial.println(topic);
+  Serial.print("  qos: ");
+  Serial.println(properties.qos);
+  Serial.print("  dup: ");
+  Serial.println(properties.dup);
+  Serial.print("  retain: ");
+  Serial.println(properties.retain);
+  Serial.print("  len: ");
+  Serial.println(len);
+  Serial.print("  index: ");
+  Serial.println(index);
+  Serial.print("  total: ");
+  Serial.println(total);
+}
+
+void onMqttPublish(uint16_t packetId) {
+  Serial.println("Publish acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+}
+
+void setupDMX() {
+  dmx_config_t dmxConfig = DMX_DEFAULT_CONFIG;
+  dmx_param_config(dmxPort, &dmxConfig);
+  dmx_set_pin(dmxPort, transmitPin, receivePin, enablePin);
+
+  int queueSize = 1;
+  int interruptPriority = 1;
+  dmx_driver_install(dmxPort, DMX_MAX_PACKET_SIZE, queueSize, &queue, interruptPriority);
+  for (int i = 0; i < DMX_MAX_PACKET_SIZE; i++) lastValues[i] = 0;
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println();
+  Serial.println();
+
+  mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
+
+  WiFi.onEvent(WiFiEvent);
+
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  mqttClient.onMessage(onMqttMessage);
+  mqttClient.onPublish(onMqttPublish);
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+
+  connectToWifi();
+  setupDMX();
+  artnet.begin(host);
+  artnet.setLength(512);
+  artnet.setUniverse(startUniverse);
+
+}
+
+const uint16_t size = 512;
+uint8_t testData[size];
+uint8_t value = 0;
+
+void loop()
+{
+  value = (millis() / 4) % 256;
+  memset(testData, value, size);
+
+  artnet.write(testData);
+
+  delay(500);
+  //artnet.streaming_data(data, size);
+  //artnet.streaming(target_ip, universe);
+}
+
+// void loop() {
+//     /* We need a place to store information about the DMX packet we receive. We
+//       will use a dmx_event_t to store that packet information.  */
+//     dmx_event_t packet;
+
+//     /* And now we wait! The DMX standard defines the amount of time until DMX
+//       officially times out. That amount of time is converted into ESP32 clock ticks
+//       using the constant `DMX_RX_PACKET_TOUT_TICK`. If it takes longer than that
+//       amount of time to receive data, this if statement will evaluate to false. */
+//     if (xQueueReceive(queue, &packet, DMX_RX_PACKET_TOUT_TICK)) {
+
+//       /* If this code gets called, it means we've recieved DMX data! */
+
+//       /* We should check to make sure that there weren't any DMX errors. */
+//       if (packet.status == DMX_OK) {
+
+//         /* If this is the first DMX data we've received, lets log it! */
+//         if (!dmxIsConnected) {
+//           Serial.println("DMX connected!");
+//           dmxIsConnected = true;
+//         }
+
+//         /* We can read the DMX data into our buffer and increment our timer. */
+//         dmx_read_packet(dmxPort, data, packet.size);
+//         timer += packet.duration;
+
+//         /* Print a log message every 1 second (1,000,000 microseconds). */
+//         if (timer >= 1000000) {
+//           /* Print the received start code - it's usually 0.*/
+//           // Serial.printf("Start code is 0x%02X and slot 1 is 0x%02X\n", data[0], data[1]);
+//           // Serial.print("Printing data array: ");
+//           Serial.println("Received DMX data on CH1: "+ String(data[1]));
+//           for (int i = 1; i < sizeof(data); i++){
+//             // Serial.printf("%D, ", data[i]);
+//             String topic = "dmx/" + String(i);
+//             int value = data[i];
+//             artnet.setByte(i, data[i]);
+//             if (value != lastValues[i]){
+//               //artnet.setByte(i, data[i])
+//               mqttClient.publish(topic.c_str(), 0, true, String(value).c_str());
+//               //client.publish(topic.c_str(), String(value).c_str());
+//                 lastValues[i] = value;
+//             }
+//             //client.publish(topic.c_str(), String(value).c_str());
+//           }
+//           Serial.println(sizeof(data));
+//           Serial.println();
+//           // Serial.println(data[0]);
+//           timer -= 1000000;
+//           artnet.write();
+//         }
+
+//       } else {
+//         /* Uh-oh! Something went wrong receiving DMX. */
+//         Serial.println("DMX error!");
+//       }
+
+//     } else if (dmxIsConnected) {
+//       /* If the DMX timed out, but we were previously connected, we will assume
+//         that there is no more DMX to read. So we can uninstall the DMX driver. */
+//       Serial.println("DMX timed out! Uninstalling DMX driver...");
+//       dmx_driver_delete(dmxPort);
+
+//       /* Stop the program. */
+//       while (true) yield();
+//     }
+//   //}
+// }

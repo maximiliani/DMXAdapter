@@ -1,0 +1,133 @@
+/*********
+  Rui Santos
+  Complete project details at https://RandomNerdTutorials.com/esp-now-one-to-many-esp32-esp8266/
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files.
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+*********/
+
+#include <esp_now.h>
+#include <WiFi.h>
+
+// REPLACE WITH YOUR ESP RECEIVER'S MAC ADDRESS
+uint8_t broadcastAddress1[] = {0x84, 0x0D, 0x8E, 0xB0, 0x86, 0xDC};
+
+typedef struct dmxData {
+    int data[50];
+    int firstValue;
+} dmxData;
+
+dmxData data0;
+dmxData data50;
+dmxData data100;
+dmxData data150;
+dmxData data200;
+dmxData data250;
+dmxData data300;
+dmxData data350;
+dmxData data400;
+dmxData data450;
+dmxData data500;
+dmxData data550;
+
+esp_now_peer_info_t peerInfo;
+
+// callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  char macStr[18];
+  Serial.print("Packet to: ");
+  // Copies the sender mac address to a string
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print(macStr);
+  Serial.print(" send status:\t");
+  Serial.print(status);
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+ 
+void setup() {
+  Serial.begin(115200);
+ 
+  WiFi.mode(WIFI_STA);
+ 
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  data0.firstValue = 0;
+  data50.firstValue = 50;
+  data100.firstValue = 100;
+  data150.firstValue = 150;
+  data200.firstValue = 200;
+  data250.firstValue = 250;
+  data300.firstValue = 300;
+  data350.firstValue = 350;
+  data400.firstValue = 400;
+  data450.firstValue = 450;
+  data500.firstValue = 500;
+  data550.firstValue = 550;
+
+  esp_now_register_send_cb(OnDataSent);
+   
+  // register peer
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  // register first peer  
+  memcpy(peerInfo.peer_addr, broadcastAddress1, 6);
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return;
+  }
+}
+ 
+void loop() {
+  for(int i = 0; i<50; i++) data0.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data50.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data100.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data150.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data200.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data250.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data300.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data350.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data400.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data450.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data500.data[i]=random(0,255);
+  for(int i = 0; i<50; i++) data550.data[i]=random(0,255);
+  //test.y = random(0,20);
+ 
+  Serial.println(sizeof(data0));
+  //esp_err_t result = esp_now_send(0, (uint8_t *) &data0, sizeof(dmxData));
+  delay(500);
+  esp_err_t result1 = esp_now_send(0, (uint8_t *) &data50, sizeof(dmxData));
+  delay(500);
+  esp_err_t result2 = esp_now_send(0, (uint8_t *) &data100, sizeof(dmxData));
+  delay(500);
+  esp_err_t result3 = esp_now_send(0, (uint8_t *) &data150, sizeof(dmxData));
+  delay(500);
+  esp_err_t result4 = esp_now_send(0, (uint8_t *) &data200, sizeof(dmxData));
+  delay(500);
+  esp_err_t result5 = esp_now_send(0, (uint8_t *) &data250, sizeof(dmxData));
+  delay(500);
+  esp_err_t result6 = esp_now_send(0, (uint8_t *) &data300, sizeof(dmxData));
+  delay(500);
+  esp_err_t result7 = esp_now_send(0, (uint8_t *) &data350, sizeof(dmxData));
+  delay(500);
+  esp_err_t result8 = esp_now_send(0, (uint8_t *) &data400, sizeof(dmxData));
+  delay(500);
+  esp_err_t result9 = esp_now_send(0, (uint8_t *) &data450, sizeof(dmxData));
+  delay(500);
+  esp_err_t result10 = esp_now_send(0, (uint8_t *) &data500, sizeof(dmxData));
+  delay(500);
+  esp_err_t result11 = esp_now_send(0, (uint8_t *) &data550, sizeof(dmxData));
+
+  if (result1 == ESP_OK) {
+    Serial.println("Sent with success");
+  }
+  else {
+    Serial.println("Error sending the data");
+  }
+  delay(2000);
+}
