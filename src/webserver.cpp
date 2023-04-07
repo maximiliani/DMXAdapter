@@ -4,6 +4,10 @@
 
 AsyncWebServer server(80);
 
+/*
+* This is the index.html file that is served by the webserver.
+* It contains the HTML, CSS and JavaScript code for the webinterface.
+*/
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
@@ -234,10 +238,17 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+/*
+* This method is called when the server receives a request to an unknown resource.
+*/
 void notFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "Not found");
 }
 
+/*
+* This method is called when the server is started.
+* It sets up the webserver with its endpoints and WiFi.
+*/
 void setupWebserver() {
     WiFi.mode(WIFI_AP_STA);
 
@@ -270,12 +281,14 @@ void setupWebserver() {
         request->send(200, "text/plain", "OK");
     });
 
+    // Display all DMX values comma-seperated (OLA compatible)
     server.on("/dmx", HTTP_GET, [](AsyncWebServerRequest *request) {
         String result = "" + (String)values[0];
         for (int i = 1; i < DMX_MAX_PACKET_SIZE; i++) result += "," + (String)values[i];
         request->send(200, "text/plain", result);
     });
 
+    // Enables user to set DMX values via HTTP POST (OLA compatible)
     server.on("/dmx", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         // uint8_t dmxData[512];
         int address = 0;
@@ -283,11 +296,6 @@ void setupWebserver() {
         for (int i = 0; i < len; i++) {
             if (data[i] == ',') {
                 setDMXValue(address, temp.toInt());
-                //// dmxData[address] = temp.toInt();
-                
-                // values[address] = temp.toInt();
-
-                //// setDMXValue(address, temp.toInt());
                 temp = "";
                 address++;
             } else {

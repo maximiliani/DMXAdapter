@@ -10,6 +10,9 @@ bool dmxIsConnected = false;
 byte data[DMX_MAX_PACKET_SIZE];
 uint8_t values[DMX_MAX_PACKET_SIZE];
 
+/*
+* This method configures the DMX driver to read DMX data.
+*/
 void setupDMXRead() {
     for (int i = 0; i < DMX_MAX_PACKET_SIZE; i++) values[i] = 0;
     dmx_config_t dmxConfig = DMX_DEFAULT_CONFIG;
@@ -21,6 +24,9 @@ void setupDMXRead() {
     dmx_driver_install(dmxPort, DMX_MAX_PACKET_SIZE, queueSize, &queue, interruptPriority);
 }
 
+/*
+* This method configures the DMX driver to write DMX data.
+*/
 void setupDMXWrite() {
     for (int i = 0; i < DMX_MAX_PACKET_SIZE; i++) values[i] = 0;
     dmx_config_t dmxConfig = DMX_DEFAULT_CONFIG;
@@ -33,6 +39,10 @@ void setupDMXWrite() {
     dmx_set_mode(dmxPort, DMX_MODE_TX);
 }
 
+/*
+* This method reads DMX data from the DMX driver.
+* It is looped to read the DMX data continuously.
+*/
 void readDMX() {
     dmx_event_t packet;
     if (xQueueReceive(queue, &packet, DMX_RX_PACKET_TOUT_TICK)) {
@@ -78,6 +88,10 @@ void readDMX() {
     }
 }
 
+/*
+* This method writes DMX data from the DMX driver.
+* It is looped to write the DMX data continuously.
+*/
 void writeDMX() {
     byte data[DMX_MAX_PACKET_SIZE];
     /* Increment every byte in our packet to the new increment value. Notice
@@ -102,6 +116,10 @@ void writeDMX() {
     dmx_wait_tx_done(dmxPort, DMX_TX_PACKET_TOUT_TICK);
 }
 
+/*
+* This method sets a DMX value in the values array.
+* Only this method should be used to set DMX values.
+*/
 void setDMXValue(uint16_t address, uint8_t value) {
     Serial.println("Setting DMX value on CH " + String(address) + " to " + String(value));
     if (address < DMX_MAX_PACKET_SIZE && value < 256) {
